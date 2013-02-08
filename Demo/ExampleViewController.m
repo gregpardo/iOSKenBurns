@@ -85,10 +85,6 @@
 	return YES;
 }
 
-- (void)dealloc {
-    [kenView release];
-    [super dealloc];
-}
 
 #pragma KenBurnsViewDelegate
 - (void)didShowImageAtIndex:(NSUInteger)index

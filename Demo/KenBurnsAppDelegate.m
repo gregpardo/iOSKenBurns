@@ -76,11 +76,5 @@
      */
 }
 
-- (void)dealloc
-{
-    [_window release];
-    [_exampleViewController release];
-    [super dealloc];
-}
 
 @end

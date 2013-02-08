@@ -29,6 +29,6 @@
     KenBurnsView *kenView;
 }
 
-@property (nonatomic, retain) IBOutlet KenBurnsView *kenView;
+@property (nonatomic, strong) IBOutlet KenBurnsView *kenView;
 
 @end

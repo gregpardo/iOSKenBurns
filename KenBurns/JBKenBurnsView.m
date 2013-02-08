@@ -84,7 +84,6 @@
 {
   NSMutableArray * arr =[[NSMutableArray alloc] init];
   self.imagesArray      = arr;
-  [arr release];
     self.timeTransition   = duration;
     self.isLoop           = shouldLoop;
     self.isLandscape      = inLandscape;
@@ -106,21 +105,21 @@
 
 - (void) _startAnimations:(NSArray *)images
 {
-    NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
+    @autoreleasepool {
     
-    for (uint i = 0; i < [images count]; i++) {
-        
-        [self performSelectorOnMainThread:@selector(_animate:)
-                               withObject:[NSNumber numberWithInt:i]
-                            waitUntilDone:YES];
-        
-        sleep(self.timeTransition);
-        
-        i = (i == [images count] - 1) && isLoop ? -1 : i;
-        
+        for (uint i = 0; i < [images count]; i++) {
+            
+            [self performSelectorOnMainThread:@selector(_animate:)
+                                   withObject:[NSNumber numberWithInt:i]
+                                waitUntilDone:YES];
+            
+            sleep(self.timeTransition);
+            
+            i = (i == [images count] - 1) && isLoop ? -1 : i;
+            
+        }
+    
     }
-    
-    [pool release];
 }
 
 - (UIImage *) _downloadImageFrom:(NSString *) url
@@ -320,7 +319,6 @@
     
     [self performSelector:@selector(_notifyDelegate:) withObject:num afterDelay:self.timeTransition];
     
-    [imageView release];
     
 }
 
