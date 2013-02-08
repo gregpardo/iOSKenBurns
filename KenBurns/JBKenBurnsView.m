@@ -44,9 +44,6 @@
 
 @implementation KenBurnsView
 
-@synthesize imagesArray, timeTransition, isLoop, isLandscape;
-@synthesize animationInCurse, currentImage, delegate;
-
 
 -(id)init
 {
@@ -115,7 +112,7 @@
             
             sleep(self.timeTransition);
             
-            i = (i == [images count] - 1) && isLoop ? -1 : i;
+            i = (i == [images count] - 1) && self.isLoop ? -1 : i;
             
         }
     
@@ -150,7 +147,7 @@
         }
         
         bufferIndex++;
-        urlIndex = (urlIndex == [urls count]-1) && isLoop ? -1 : urlIndex; 
+        urlIndex = (urlIndex == [urls count]-1) && self.isLoop ? -1 : urlIndex;
         
         sleep(self.timeTransition);
     }
@@ -324,13 +321,13 @@
 
 - (void) _notifyDelegate: (NSNumber *)imageIndex
 {
-    if (delegate) {
+    if (self.delegate) {
         if([self.delegate respondsToSelector:@selector(didShowImageAtIndex:)])
         {
             [self.delegate didShowImageAtIndex:[imageIndex intValue]];
         }      
         
-        if ([imageIndex intValue] == ([self.imagesArray count]-1) && !isLoop && [self.delegate respondsToSelector:@selector(didFinishAllAnimations)]) {            
+        if ([imageIndex intValue] == ([self.imagesArray count]-1) && ! self.isLoop && [self.delegate respondsToSelector:@selector(didFinishAllAnimations)]) {
             [self.delegate didFinishAllAnimations];        
         } 
     }
