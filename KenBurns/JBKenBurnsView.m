@@ -174,8 +174,8 @@
     float zoomInY       = -1;
     float moveX         = -1;
     float moveY         = -1;
-    float frameWidth    = isLandscape? self.frame.size.width : self.frame.size.height;
-    float frameHeight   = isLandscape? self.frame.size.height : self.frame.size.width;
+    float frameWidth    = self.isLandscape? self.frame.size.width : self.frame.size.height;
+    float frameHeight   = self.isLandscape? self.frame.size.height : self.frame.size.width;
     
     // Widder than screen 
     if (image.size.width > frameWidth)
