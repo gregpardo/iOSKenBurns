@@ -82,7 +82,9 @@
 
 - (void) animateWithURLs:(NSArray *)urls transitionDuration:(float)duration loop:(BOOL)shouldLoop isLandscape:(BOOL)inLandscape;
 {
-    self.imagesArray      = [[NSMutableArray alloc] init];
+  NSMutableArray * arr =[[NSMutableArray alloc] init];
+  self.imagesArray      = arr;
+  [arr release];
     self.timeTransition   = duration;
     self.isLoop           = shouldLoop;
     self.isLandscape      = inLandscape;
@@ -92,9 +94,8 @@
     
     // Fill the buffer.
     for (uint i=0; i<bufferSize; i++) {
-        NSString *url = [[NSString alloc] initWithString:[urls objectAtIndex:i]];
-        [self.imagesArray addObject:[self _downloadImageFrom:url]];
-        [url release];
+      NSString * url = [NSString stringWithString:[urls objectAtIndex:i]];
+      [self.imagesArray addObject:[self _downloadImageFrom:url]];
     }
     
     self.layer.masksToBounds = YES;
@@ -125,16 +126,15 @@
 - (UIImage *) _downloadImageFrom:(NSString *) url
 {
     UIImage *image = [UIImage imageWithData:[NSData dataWithContentsOfURL:[NSURL URLWithString:url]]];
-    [url release];
     return image;
 }
 
 - (void) _startInternetAnimations:(NSArray *)urls
 {
-    NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
-    BOOL wrapping = NO;
+  @autoreleasepool {
+
     int bufferIndex = 0;
-    
+  
     for (int urlIndex=self.imagesArray.count; urlIndex < [urls count]; urlIndex++) {
         
         [self performSelectorOnMainThread:@selector(_animate:)
@@ -147,7 +147,6 @@
         if ( bufferIndex == self.imagesArray.count -1)
         {
             NSLog(@"Wrapping!!");
-            wrapping = YES;
             bufferIndex = -1;
         }
         
@@ -156,8 +155,8 @@
         
         sleep(self.timeTransition);
     }
-    
-    [pool release];
+  }
+  
 }
 
 - (void) _animate:(NSNumber*)num
