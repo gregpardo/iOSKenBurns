@@ -5,25 +5,28 @@
 //  Created by Javier Berlana on 9/23/11.
 //  Copyright (c) 2011, Javier Berlana
 //
-//  Permission is hereby granted, free of charge, to any person obtaining a copy of this 
-//  software and associated documentation files (the "Software"), to deal in the Software 
-//  without restriction, including without limitation the rights to use, copy, modify, merge, 
-//  publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons 
+//  Permission is hereby granted, free of charge, to any person obtaining a copy of this
+//  software and associated documentation files (the "Software"), to deal in the Software
+//  without restriction, including without limitation the rights to use, copy, modify, merge,
+//  publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons
 //  to whom the Software is furnished to do so, subject to the following conditions:
 //
-//  The above copyright notice and this permission notice shall be included in all copies 
+//  The above copyright notice and this permission notice shall be included in all copies
 //  or substantial portions of the Software.
 //
-//  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, 
-//  INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR 
-//  PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE 
-//  FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, 
-//  ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS 
+//  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+//  INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR
+//  PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE
+//  FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+//  ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
 //  IN THE SOFTWARE.
 //
 
 #import "JBKenBurnsView.h"
 #include <stdlib.h>
+#import <AssetsLibrary/AssetsLibrary.h>
+#import <ImageIO/ImageIO.h>
+#import <MobileCoreServices/MobileCoreServices.h>
 
 #define enlargeRatio 1.2
 #define imageBufer 3
@@ -33,10 +36,11 @@
 
 @property (nonatomic) int currentImage;
 @property (nonatomic) BOOL animationInCurse;
+@property (nonatomic) int totalImageCount;
 
-- (void) _animate:(NSNumber*)num;
+- (void) _animate:(NSNumber*)num withImage:(UIImage*)image;
 - (void) _startAnimations:(NSArray*)images;
-- (void) _startInternetAnimations:(NSArray *)urls;
+- (void) _startAsynchronousAnimations:(NSArray *)urls;
 - (UIImage *) _downloadImageFrom:(NSString *)url;
 - (void) _notifyDelegate:(NSNumber *) imageIndex;
 @end
@@ -44,7 +48,7 @@
 
 @implementation KenBurnsView
 
-@synthesize imagesArray, timeTransition, isLoop, isLandscape;
+@synthesize imagesArray, timeTransition, isLoop, isPortrait;
 @synthesize animationInCurse, currentImage, delegate;
 
 
@@ -66,13 +70,14 @@
     return self;
 }
 
-- (void) animateWithImages:(NSMutableArray *)images transitionDuration:(float)duration loop:(BOOL)shouldLoop isLandscape:(BOOL)inLandscape;
+- (void) animateWithImages:(NSMutableArray *)images transitionDuration:(float)duration loop:(BOOL)shouldLoop isPortrait:(BOOL)isPortrait;
 {
     self.imagesArray      = images;
     self.timeTransition   = duration;
     self.isLoop           = shouldLoop;
-    self.isLandscape      = inLandscape;
+    self.isPortrait       = isPortrait;
     self.animationInCurse = NO;
+    self.totalImageCount  = [images count];
     
     self.layer.masksToBounds = YES;
     
@@ -80,89 +85,157 @@
     
 }
 
-- (void) animateWithURLs:(NSArray *)urls transitionDuration:(float)duration loop:(BOOL)shouldLoop isLandscape:(BOOL)inLandscape;
+- (void) animateWithURLs:(NSArray *)urls transitionDuration:(float)duration loop:(BOOL)shouldLoop isPortrait:(BOOL)isPortrait;
 {
     self.imagesArray      = [[NSMutableArray alloc] init];
     self.timeTransition   = duration;
     self.isLoop           = shouldLoop;
-    self.isLandscape      = inLandscape;
+    self.isPortrait       = isPortrait;
     self.animationInCurse = NO;
+    self.totalImageCount  = [urls count];
     
     int bufferSize = (imageBufer < urls.count) ? imageBufer : urls.count;
+    __block BOOL busy = YES;
+    dispatch_queue_t myQueue = dispatch_queue_create("tbfiBufferImageQueue", 0);
     
     // Fill the buffer.
-    for (uint i=0; i<bufferSize; i++) {
-        NSString *url = [[NSString alloc] initWithString:[urls objectAtIndex:i]];
-        [self.imagesArray addObject:[self _downloadImageFrom:url]];
-        [url release];
+    dispatch_sync(myQueue, ^{
+        for(int i = 0; i < bufferSize; i++) {
+            NSString *url = [urls objectAtIndex:i];
+            if([url hasPrefix:@"assets"]) {
+                ALAssetsLibrary* assetslibrary = [[ALAssetsLibrary alloc] init];
+                
+                ALAssetsLibraryAssetForURLResultBlock resultblock = ^(ALAsset *myasset) {
+                    CGImageRef imageRef = [[myasset defaultRepresentation] fullResolutionImage];
+                    UIImage *image = [UIImage imageWithCGImage:imageRef];
+                    
+                    [self.imagesArray addObject:image];
+                    if([self.imagesArray count] == bufferSize) {
+                        busy = false;
+                    }
+                };
+                
+                [assetslibrary assetForURL:[NSURL URLWithString:url]
+                               resultBlock:resultblock
+                              failureBlock:^(NSError *error) {
+                                  NSLog(@"error couldn't get photo");
+                                  busy = false;
+                              }];
+            } else {
+                UIImage *image = [[UIImage alloc] initWithContentsOfFile:url];
+                [self.imagesArray addObject:image];
+                
+                if([self.imagesArray count] == bufferSize) {
+                    busy = false;
+                }
+            }
+        }
+    });
+    
+    while(busy) {
+        [[NSRunLoop currentRunLoop] runMode:NSDefaultRunLoopMode beforeDate:[NSDate distantFuture]];
     }
     
     self.layer.masksToBounds = YES;
     
-    [NSThread detachNewThreadSelector:@selector(_startInternetAnimations:) toTarget:self withObject:urls];
+    [NSThread detachNewThreadSelector:@selector(_startAsynchronousAnimations:) toTarget:self withObject:urls];
     
 }
 
 - (void) _startAnimations:(NSArray *)images
 {
-    NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
-    
     for (uint i = 0; i < [images count]; i++) {
-        
-        [self performSelectorOnMainThread:@selector(_animate:)
-                               withObject:[NSNumber numberWithInt:i]
-                            waitUntilDone:YES];
+        dispatch_sync(dispatch_get_main_queue(), ^{
+            if([self.delegate respondsToSelector:@selector(willShowImageAtIndex:)]) {
+                [self.delegate willShowImageAtIndex:i];
+            }
+            
+            [self _animate:[NSNumber numberWithInt:i]
+                 withImage:[images objectAtIndex:i]];
+        });
         
         sleep(self.timeTransition);
         
         i = (i == [images count] - 1) && isLoop ? -1 : i;
         
     }
-    
-    [pool release];
 }
 
-- (UIImage *) _downloadImageFrom:(NSString *) url
-{
-    UIImage *image = [UIImage imageWithData:[NSData dataWithContentsOfURL:[NSURL URLWithString:url]]];
-    [url release];
+- (UIImage *) _downloadImageFrom:(NSString *) url {
+    NSURL *imageURL = nil;
+    if([url hasPrefix:@"/"] || [url hasPrefix:@"file://"]) {
+        imageURL = [NSURL fileURLWithPath:url];
+    } else if([url hasPrefix:@"assets-library://"]) {
+        ALAssetsLibrary* assetslibrary = [[ALAssetsLibrary alloc] init];
+        
+        ALAssetsLibraryAssetForURLResultBlock resultblock = ^(ALAsset *myasset) {
+            CGImageRef imageRef = [[myasset defaultRepresentation] fullResolutionImage];
+            UIImage *image = [UIImage imageWithCGImage:imageRef];
+            
+            [self.imagesArray addObject:image];
+        };
+        
+        [assetslibrary assetForURL:[NSURL URLWithString:url]
+                       resultBlock:resultblock
+                      failureBlock:^(NSError *error) {
+                          NSLog(@"error couldn't get photo");
+                      }];
+        return nil;
+    } else {
+        imageURL = [NSURL URLWithString:url];
+    }
+    
+    UIImage *image = nil;
+    
+    if(![imageURL isFileURL]) {
+        image = [UIImage imageWithData:[NSData dataWithContentsOfURL:imageURL]];
+    } else {
+        image = [UIImage imageWithData:[NSData dataWithContentsOfFile:url]];
+    }
+    
     return image;
 }
 
-- (void) _startInternetAnimations:(NSArray *)urls
+- (void) _startAsynchronousAnimations:(NSArray *)urls
 {
-    NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
-    BOOL wrapping = NO;
-    int bufferIndex = 0;
+    int bufferIndex = [self.imagesArray count];
     
-    for (int urlIndex=self.imagesArray.count; urlIndex < [urls count]; urlIndex++) {
+    BOOL preloadImage = YES;
+    if([urls count] <= [self.imagesArray count]) {
+        preloadImage = NO;
+    }
+    for (int urlIndex = 0; urlIndex < [urls count]; urlIndex++, bufferIndex++) {
+        dispatch_sync(dispatch_get_main_queue(), ^{
+            if([self.delegate respondsToSelector:@selector(willShowImageAtIndex:)]) {
+                [self.delegate willShowImageAtIndex:urlIndex];
+            }
+            
+            NSUInteger loadingImageIndex = preloadImage ? 0 : urlIndex;
+            [self _animate:[NSNumber numberWithInt:urlIndex]
+                 withImage:[self.imagesArray objectAtIndex:loadingImageIndex]];
+        });
         
-        [self performSelectorOnMainThread:@selector(_animate:)
-                               withObject:[NSNumber numberWithInt:0]
-                            waitUntilDone:YES];            
-        
-        [self.imagesArray removeObjectAtIndex:0];
-        [self.imagesArray addObject:[self _downloadImageFrom:[urls objectAtIndex: urlIndex]]];
-        
-        if ( bufferIndex == self.imagesArray.count -1)
-        {
-            NSLog(@"Wrapping!!");
-            wrapping = YES;
-            bufferIndex = -1;
+        if(preloadImage) {
+            [self.imagesArray removeObjectAtIndex:0];
+            UIImage *preloadedImage = [self _downloadImageFrom:[urls objectAtIndex: bufferIndex]];
+            if(preloadedImage != nil) {
+                [self.imagesArray addObject:preloadedImage];
+            }
+            
+            if(bufferIndex == self.totalImageCount - 1) {
+                NSLog(@"Wrapping!!");
+                bufferIndex = -1;
+            }
         }
         
-        bufferIndex++;
-        urlIndex = (urlIndex == [urls count]-1) && isLoop ? -1 : urlIndex; 
+        urlIndex = (urlIndex == [urls count] - 1) && isLoop ? -1 : urlIndex;
         
         sleep(self.timeTransition);
     }
-    
-    [pool release];
+
 }
 
-- (void) _animate:(NSNumber*)num
-{
-    UIImage* image = [self.imagesArray objectAtIndex:[num intValue]];
+- (void) _animate:(NSNumber*)num withImage:(UIImage*)image {
     UIImageView *imageView;
     
     float resizeRatio   = -1;
@@ -174,10 +247,10 @@
     float zoomInY       = -1;
     float moveX         = -1;
     float moveY         = -1;
-    float frameWidth    = isLandscape? self.frame.size.width : self.frame.size.height;
-    float frameHeight   = isLandscape? self.frame.size.height : self.frame.size.width;
+    float frameWidth    = isPortrait? self.frame.size.width : self.frame.size.height;
+    float frameHeight   = isPortrait? self.frame.size.height : self.frame.size.width;
     
-    // Widder than screen 
+    // Widder than screen
     if (image.size.width > frameWidth)
     {
         widthDiff  = image.size.width - frameWidth;
@@ -187,7 +260,7 @@
         {
             heightDiff = image.size.height - frameHeight;
             
-            if (widthDiff > heightDiff) 
+            if (widthDiff > heightDiff)
                 resizeRatio = frameHeight / image.size.height;
             else
                 resizeRatio = frameWidth / image.size.width;
@@ -198,7 +271,7 @@
         {
             heightDiff = frameHeight - image.size.height;
             
-            if (widthDiff > heightDiff) 
+            if (widthDiff > heightDiff)
                 resizeRatio = frameWidth / image.size.width;
             else
                 resizeRatio = self.bounds.size.height / image.size.height;
@@ -215,7 +288,7 @@
         {
             heightDiff = image.size.height - frameHeight;
             
-            if (widthDiff > heightDiff) 
+            if (widthDiff > heightDiff)
                 resizeRatio = image.size.height / frameHeight;
             else
                 resizeRatio = frameWidth / image.size.width;
@@ -226,7 +299,7 @@
         {
             heightDiff = frameHeight - image.size.height;
             
-            if (widthDiff > heightDiff) 
+            if (widthDiff > heightDiff)
                 resizeRatio = frameWidth / image.size.width;
             else
                 resizeRatio = frameHeight / image.size.height;
@@ -289,7 +362,7 @@
     
     CALayer *picLayer    = [CALayer layer];
     picLayer.contents    = (id)image.CGImage;
-    picLayer.anchorPoint = CGPointMake(0, 0); 
+    picLayer.anchorPoint = CGPointMake(0, 0);
     picLayer.bounds      = CGRectMake(0, 0, optimusWidth, optimusHeight);
     picLayer.position    = CGPointMake(originX, originY);
     
@@ -309,7 +382,7 @@
     
     // Generates the animation
     [UIView beginAnimations:nil context:NULL];
-    [UIView setAnimationDuration:self.timeTransition+2];
+    [UIView setAnimationDuration:self.timeTransition + 2];
     [UIView setAnimationCurve:UIViewAnimationCurveEaseIn];
     CGAffineTransform rotate    = CGAffineTransformMakeRotation(rotation);
     CGAffineTransform moveRight = CGAffineTransformMakeTranslation(moveX, moveY);
@@ -321,20 +394,19 @@
     
     [self performSelector:@selector(_notifyDelegate:) withObject:num afterDelay:self.timeTransition];
     
-    [imageView release];
-    
 }
 
 - (void) _notifyDelegate: (NSNumber *)imageIndex
 {
     if (delegate) {
-        if([self.delegate respondsToSelector:@selector(didShowImageAtIndex:)])
-        {
+        if([self.delegate respondsToSelector:@selector(didShowImageAtIndex:)]) {
             [self.delegate didShowImageAtIndex:[imageIndex intValue]];
-        }      
+        }
         
-        if ([imageIndex intValue] == ([self.imagesArray count]-1) && !isLoop && [self.delegate respondsToSelector:@selector(didFinishAllAnimations)]) {            
-            [self.delegate didFinishAllAnimations];        
+        if ([imageIndex intValue] == (self.totalImageCount - 1) &&
+            !isLoop &&
+            [self.delegate respondsToSelector:@selector(didFinishAllAnimations)]) {
+            [self.delegate didFinishAllAnimations];
         } 
     }
     
