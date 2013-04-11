@@ -27,6 +27,7 @@
 #import <AssetsLibrary/AssetsLibrary.h>
 #import <ImageIO/ImageIO.h>
 #import <MobileCoreServices/MobileCoreServices.h>
+#import "UIImage+fixOrientation.h"
 
 #define enlargeRatio 1.2
 #define imageBufer 3
@@ -106,8 +107,13 @@
                 ALAssetsLibrary* assetslibrary = [[ALAssetsLibrary alloc] init];
                 
                 ALAssetsLibraryAssetForURLResultBlock resultblock = ^(ALAsset *myasset) {
-                    CGImageRef imageRef = [[myasset defaultRepresentation] fullResolutionImage];
-                    UIImage *image = [UIImage imageWithCGImage:imageRef];
+                    ALAssetRepresentation *assetRepresentation = [myasset defaultRepresentation];
+                    UIImageOrientation orientation = UIImageOrientationUp;
+                    orientation = [[myasset valueForProperty:@"ALAssetPropertyOrientation"] intValue];
+                    
+                    CGImageRef imageRef = [assetRepresentation fullResolutionImage];
+                    UIImage *image = [UIImage imageWithCGImage:imageRef scale:1.0f orientation:orientation];
+                    image = [image fixOrientation];
                     
                     [self.imagesArray addObject:image];
                     if([self.imagesArray count] == bufferSize) {
@@ -169,8 +175,13 @@
         ALAssetsLibrary* assetslibrary = [[ALAssetsLibrary alloc] init];
         
         ALAssetsLibraryAssetForURLResultBlock resultblock = ^(ALAsset *myasset) {
-            CGImageRef imageRef = [[myasset defaultRepresentation] fullResolutionImage];
-            UIImage *image = [UIImage imageWithCGImage:imageRef];
+            ALAssetRepresentation *assetRepresentation = [myasset defaultRepresentation];
+            UIImageOrientation orientation = UIImageOrientationUp;
+            orientation = [[myasset valueForProperty:@"ALAssetPropertyOrientation"] intValue];
+            
+            CGImageRef imageRef = [assetRepresentation fullResolutionImage];
+            UIImage *image = [UIImage imageWithCGImage:imageRef scale:1.0f orientation:orientation];
+            image = [image fixOrientation];
             
             [self.imagesArray addObject:image];
         };
@@ -247,8 +258,9 @@
     float zoomInY       = -1;
     float moveX         = -1;
     float moveY         = -1;
-    float frameWidth    = isPortrait? self.frame.size.width : self.frame.size.height;
-    float frameHeight   = isPortrait? self.frame.size.height : self.frame.size.width;
+    
+    float frameWidth    = isPortrait ? self.frame.size.width : self.frame.size.height;
+    float frameHeight   = isPortrait ? self.frame.size.height : self.frame.size.width;
     
     // Widder than screen
     if (image.size.width > frameWidth)
