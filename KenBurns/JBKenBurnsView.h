@@ -37,14 +37,9 @@
 
 @end
 
-@interface KenBurnsView : UIView {
-    NSMutableArray *imagesArray;
-    float timeTransition;
-    BOOL isLoop;
-    BOOL isPortrait;
-    __weak id <KenBurnsViewDelegate> delegate;
-}
+@interface KenBurnsView : UIView
 
+@property (nonatomic, weak) id<KenBurnsViewDelegate> delegate;
 @property (nonatomic, assign) float timeTransition;
 @property (nonatomic, strong) NSMutableArray *imagesArray;
 @property (nonatomic) BOOL isLoop;

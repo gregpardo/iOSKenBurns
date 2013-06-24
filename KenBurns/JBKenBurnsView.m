@@ -27,7 +27,6 @@
 #import <AssetsLibrary/AssetsLibrary.h>
 #import <ImageIO/ImageIO.h>
 #import <MobileCoreServices/MobileCoreServices.h>
-#import "UIImage+fixOrientation.h"
 
 #define enlargeRatio 1.2
 #define imageBufer   3
@@ -53,7 +52,7 @@
 @synthesize imagesArray, timeTransition, isLoop, isPortrait;
 @synthesize animationInCurse, currentImage, delegate;
 
-
+/*
 - (id)init {
     self = [super init];
     if (self) {
@@ -68,14 +67,14 @@
         self.layer.masksToBounds = YES;
     }
     return self;
-}
+}*/
 
-- (void)animateWithImages:(NSMutableArray *)images transitionDuration:(float)duration loop:(BOOL)shouldLoop isPortrait:(BOOL)isPortrait;
+- (void)animateWithImages:(NSMutableArray *)images transitionDuration:(float)duration loop:(BOOL)shouldLoop isPortrait:(BOOL)portrait;
 {
     self.imagesArray      = images;
     self.timeTransition   = duration;
     self.isLoop           = shouldLoop;
-    self.isPortrait       = isPortrait;
+    self.isPortrait       = portrait;
     self.animationInCurse = NO;
     self.totalImageCount  = [images count];
     
@@ -84,13 +83,13 @@
     [NSThread detachNewThreadSelector:@selector(_startAnimations:) toTarget:self withObject:images];
 }
 
-- (void)animateWithURLs:(NSArray *)urls transitionDuration:(float)duration loop:(BOOL)shouldLoop isPortrait:(BOOL)isPortrait;
+- (void)animateWithURLs:(NSArray *)urls transitionDuration:(float)duration loop:(BOOL)shouldLoop isPortrait:(BOOL)portrait;
 {
     NSMutableArray *arr = [[NSMutableArray alloc] init];
     self.imagesArray      = arr;
     self.timeTransition   = duration;
     self.isLoop           = shouldLoop;
-    self.isPortrait       = isPortrait;
+    self.isPortrait       = portrait;
     self.animationInCurse = NO;
     self.totalImageCount  = [urls count];
     
@@ -112,7 +111,7 @@
                     
                     CGImageRef imageRef = [assetRepresentation fullResolutionImage];
                     UIImage *image = [UIImage imageWithCGImage:imageRef scale:1.0f orientation:orientation];
-                    image = [image fixOrientation];
+                    image = [self normalizedImage:image];
                     
                     [self.imagesArray addObject:image];
                     if ([self.imagesArray count] == bufferSize) {
@@ -127,7 +126,8 @@
                                   busy = false;
                               }];
             } else {
-                UIImage *image = [[UIImage alloc] initWithContentsOfFile:url];
+                NSData *data = [NSData dataWithContentsOfURL:[NSURL URLWithString:url]];
+                UIImage *image = [[UIImage alloc] initWithData:data];
                 [self.imagesArray addObject:image];
                 
                 if ([self.imagesArray count] == bufferSize) {
@@ -143,6 +143,16 @@
     self.layer.masksToBounds = YES;
     
     [NSThread detachNewThreadSelector:@selector(_startAsynchronousAnimations:) toTarget:self withObject:urls];
+}
+
+- (UIImage *)normalizedImage:(UIImage*)image {
+    if (image.imageOrientation == UIImageOrientationUp) return image;
+    
+    UIGraphicsBeginImageContextWithOptions(image.size, NO, image.scale);
+    [image drawInRect:(CGRect){0, 0, image.size}];
+    UIImage *normalizedImage = UIGraphicsGetImageFromCurrentImageContext();
+    UIGraphicsEndImageContext();
+    return normalizedImage;
 }
 
 - (void)_startAnimations:(NSArray *)images {
@@ -178,7 +188,7 @@
             
             CGImageRef imageRef = [assetRepresentation fullResolutionImage];
             UIImage *image = [UIImage imageWithCGImage:imageRef scale:1.0f orientation:orientation];
-            image = [image fixOrientation];
+            image = [self normalizedImage:image];
             
             [self.imagesArray addObject:image];
         };
@@ -195,11 +205,7 @@
     
     UIImage *image = nil;
     
-    if (![imageURL isFileURL]) {
-        image = [UIImage imageWithData:[NSData dataWithContentsOfURL:imageURL]];
-    } else {
-        image = [UIImage imageWithData:[NSData dataWithContentsOfFile:url]];
-    }
+    image = [UIImage imageWithData:[NSData dataWithContentsOfURL:imageURL]];
     
     return image;
 }
