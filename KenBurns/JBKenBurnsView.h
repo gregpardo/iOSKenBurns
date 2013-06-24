@@ -44,7 +44,6 @@
 @property (nonatomic, strong) NSMutableArray *imagesArray;
 @property (nonatomic) BOOL isLoop;
 @property (nonatomic) BOOL isPortrait;
-@property (weak) id<KenBurnsViewDelegate> delegate;
 
 - (void) animateWithImages:(NSArray *)images transitionDuration:(float)time loop:(BOOL)isLoop isPortrait:(BOOL)isPortrait;
 - (void) animateWithURLs:(NSArray *)urls transitionDuration:(float)duration loop:(BOOL)shouldLoop isPortrait:(BOOL)isPortrait;
